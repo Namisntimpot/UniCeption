@@ -240,16 +240,15 @@ class Attention(nn.Module):
             )
             q = q * scaling_factor
 
-        if self.fused_attn:
-            x = F.scaled_dot_product_attention(
-                q, k, v, dropout_p=(self.attn_drop.p if self.training else 0.0), scale=self.scale
-            )
-        else:
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            x = attn @ v
+        x = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            dropout_p=(self.attn_drop.p if self.training else 0.0),
+            is_causal=False,
+            scale=self.scale,
+        )
 
         x = x.transpose(1, 2).reshape(B, N, -1)
         x = self.proj(x)
@@ -369,16 +368,15 @@ class CrossAttention(nn.Module):
             )
             q = q * scaling_factor
 
-        if self.fused_attn:
-            x = F.scaled_dot_product_attention(
-                q, k, v, dropout_p=(self.attn_drop.p if self.training else 0.0), scale=self.scale
-            )
-        else:
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            x = attn @ v
+        x = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            dropout_p=(self.attn_drop.p if self.training else 0.0),
+            is_causal=False,
+            scale=self.scale,
+        )
 
         x = x.transpose(1, 2).reshape(B, Nq, C)
         x = self.proj(x)
@@ -770,25 +768,24 @@ class DiffAttention(nn.Module):
         q1, q2 = q.chunk(2, dim=1)  # split heads dimension into two
         k1, k2 = k.chunk(2, dim=1)  # split heads dimension into two
 
-        if self.fused_attn:
-            attn1 = F.scaled_dot_product_attention(
-                q1, k1, v, dropout_p=(self.attn_drop.p if self.training else 0.0), scale=self.scale
-            )
-            attn2 = F.scaled_dot_product_attention(
-                q2, k2, v, dropout_p=(self.attn_drop.p if self.training else 0.0), scale=self.scale
-            )
-        else:
-            q1 = q1 * self.scale
-            attn = q1 @ k1.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            attn1 = attn @ v
-
-            q2 = q2 * self.scale
-            attn = q2 @ k2.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            attn2 = attn @ v
+        attn1 = F.scaled_dot_product_attention(
+            q1,
+            k1,
+            v,
+            attn_mask=None,
+            dropout_p=(self.attn_drop.p if self.training else 0.0),
+            is_causal=False,
+            scale=self.scale,
+        )
+        attn2 = F.scaled_dot_product_attention(
+            q2,
+            k2,
+            v,
+            attn_mask=None,
+            dropout_p=(self.attn_drop.p if self.training else 0.0),
+            is_causal=False,
+            scale=self.scale,
+        )
 
         lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(q)
         lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(q)
@@ -908,25 +905,24 @@ class DiffCrossAttention(nn.Module):
         q1, q2 = q.chunk(2, dim=1)  # split heads dimension into two
         k1, k2 = k.chunk(2, dim=1)  # split heads dimension into two
 
-        if self.fused_attn:
-            attn1 = F.scaled_dot_product_attention(
-                q1, k1, v, dropout_p=(self.attn_drop.p if self.training else 0.0), scale=self.scale
-            )
-            attn2 = F.scaled_dot_product_attention(
-                q2, k2, v, dropout_p=(self.attn_drop.p if self.training else 0.0), scale=self.scale
-            )
-        else:
-            q1 = q1 * self.scale
-            attn = q1 @ k1.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            attn1 = attn @ v
-
-            q2 = q2 * self.scale
-            attn = q2 @ k2.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            attn2 = attn @ v
+        attn1 = F.scaled_dot_product_attention(
+            q1,
+            k1,
+            v,
+            attn_mask=None,
+            dropout_p=(self.attn_drop.p if self.training else 0.0),
+            is_causal=False,
+            scale=self.scale,
+        )
+        attn2 = F.scaled_dot_product_attention(
+            q2,
+            k2,
+            v,
+            attn_mask=None,
+            dropout_p=(self.attn_drop.p if self.training else 0.0),
+            is_causal=False,
+            scale=self.scale,
+        )
 
         attn1 = attn1.transpose(1, 2)  # B, Nq, Nh, Dh
         attn2 = attn2.transpose(1, 2)

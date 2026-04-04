@@ -10,9 +10,6 @@ from core import probe
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.attention.flex_attention import BlockMask, _mask_mod_signature, flex_attention
-from xformers.ops import AttentionBias, fmha
-
-
 class InitStdFactor(Enum):
     DISABLED = "disabled"  # Init std is divided by 1.0
     GLOBAL_DEPTH = "global_depth"  # Init std is divided by sqrt(2*n_layers)
@@ -379,7 +376,7 @@ class Attention(nn.Module):
         x: torch.Tensor,
         freq_cis: torch.Tensor,
         tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, AttentionBias, str]] = None,
+        mask: Optional[Union[BlockMask, str, torch.Tensor]] = None,
         attn_impl: str = "sdpa",
     ) -> torch.Tensor:
         # B S D
@@ -404,32 +401,20 @@ class Attention(nn.Module):
         xk = repeat_kv(xk, self.heads_per_group, dim=2)
         xv = repeat_kv(xv, self.heads_per_group, dim=2)
 
-        if attn_impl == "flex_attention":
-            assert mask is None or isinstance(mask, BlockMask)
-            xq, xk, xv = map(lambda e: e.transpose(1, 2), (xq, xk, xv))
-            output = flex_attention(xq, xk, xv, block_mask=mask)
-            output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
-
-        elif attn_impl == "fmha":
-            assert mask is None or isinstance(mask, AttentionBias)
-            output = fmha.memory_efficient_attention(xq, xk, xv, attn_bias=mask)
-            # This uses B S H D instead of B H S D of pytorch
-
-        elif attn_impl == "sdpa":
-            xq, xk, xv = map(lambda e: e.transpose(1, 2), (xq, xk, xv))
-            assert mask is None or isinstance(mask, (str, torch.Tensor))
-            is_causal = (mask == "causal") if isinstance(mask, str) else False
-            mask = mask if isinstance(mask, torch.Tensor) else None
-            output = F.scaled_dot_product_attention(
-                xq,
-                xk,
-                xv,
-                is_causal=is_causal,
-                attn_mask=mask,
-            )
-            output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
-        else:
+        if attn_impl not in ("sdpa", "flex_attention", "fmha"):
             raise NotImplementedError(f"Attention implementation {attn_impl} not supported")
+        xq, xk, xv = map(lambda e: e.transpose(1, 2), (xq, xk, xv))
+        assert mask is None or isinstance(mask, (str, torch.Tensor))
+        is_causal = (mask == "causal") if isinstance(mask, str) else False
+        mask = mask if isinstance(mask, torch.Tensor) else None
+        output = F.scaled_dot_product_attention(
+            xq,
+            xk,
+            xv,
+            is_causal=is_causal,
+            attn_mask=mask,
+        )
+        output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
 
         output = self.wo(output.reshape(output_shape))
 

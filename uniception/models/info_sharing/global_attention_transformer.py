@@ -363,11 +363,13 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
             additional_tokens_positions = [None] * model_input.additional_input_tokens.shape[2]
             multi_view_positions = multi_view_positions + additional_tokens_positions
 
+        batch_size_int = int(batch_size)
+        num_of_tokens_per_view_int = int(num_of_tokens_per_view)
+
         if self.distinguish_ref_and_non_ref_views:
             # Add positional encoding for reference view (idx 0)
-            ref_view_pe = self.view_pos_table[0].clone().detach()
-            ref_view_pe = ref_view_pe.reshape((1, 1, self.dim))
-            ref_view_pe = ref_view_pe.repeat(batch_size, num_of_tokens_per_view, 1)
+            ref_view_pe = self.view_pos_table[0:1].detach().reshape(1, 1, self.dim)
+            ref_view_pe = ref_view_pe.expand(batch_size_int, num_of_tokens_per_view_int, self.dim)
             ref_view_features = multi_view_features[:, :num_of_tokens_per_view, :]
             ref_view_features = ref_view_features + ref_view_pe
         else:
@@ -376,13 +378,22 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
         if self.distinguish_ref_and_non_ref_views and self.use_pe_for_non_reference_views:
             # Add positional encoding for non-reference views (sequential indices starting from idx 1 or random indices which are uniformly sampled)
             if self.use_rand_idx_pe_for_non_reference_views:
-                non_ref_view_pe_indices = torch.randint(low=1, high=self.max_num_views_for_pe, size=(num_of_views - 1,))
+                non_ref_view_pe_indices = torch.randint(
+                    low=1,
+                    high=self.max_num_views_for_pe,
+                    size=(num_of_views - 1,),
+                    device=self.view_pos_table.device,
+                )
+                non_ref_view_pe = self.view_pos_table[non_ref_view_pe_indices].detach()
             else:
-                non_ref_view_pe_indices = torch.arange(1, num_of_views)
-            non_ref_view_pe = self.view_pos_table[non_ref_view_pe_indices].clone().detach()
-            non_ref_view_pe = non_ref_view_pe.reshape((1, num_of_views - 1, self.dim))
-            non_ref_view_pe = non_ref_view_pe.repeat_interleave(num_of_tokens_per_view, dim=1)
-            non_ref_view_pe = non_ref_view_pe.repeat(batch_size, 1, 1)
+                non_ref_view_pe = self.view_pos_table[1:num_of_views].detach()
+            non_ref_view_pe = non_ref_view_pe.reshape((1, num_of_views - 1, 1, self.dim))
+            non_ref_view_pe = non_ref_view_pe.expand(
+                batch_size_int,
+                num_of_views - 1,
+                num_of_tokens_per_view_int,
+                self.dim,
+            ).reshape(batch_size_int, (num_of_views - 1) * num_of_tokens_per_view_int, self.dim)
             non_ref_view_features = multi_view_features[
                 :, num_of_tokens_per_view : num_of_views * num_of_tokens_per_view, :
             ]
@@ -726,11 +737,13 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
             additional_tokens_positions = [None] * model_input.additional_input_tokens.shape[2]
             multi_view_positions = multi_view_positions + additional_tokens_positions
 
+        batch_size_int = int(batch_size)
+        num_of_tokens_per_view_int = int(num_of_tokens_per_view)
+
         if self.distinguish_ref_and_non_ref_views:
             # Add positional encoding for reference view (idx 0)
-            ref_view_pe = self.view_pos_table[0].clone().detach()
-            ref_view_pe = ref_view_pe.reshape((1, 1, self.dim))
-            ref_view_pe = ref_view_pe.repeat(batch_size, num_of_tokens_per_view, 1)
+            ref_view_pe = self.view_pos_table[0:1].detach().reshape(1, 1, self.dim)
+            ref_view_pe = ref_view_pe.expand(batch_size_int, num_of_tokens_per_view_int, self.dim)
             ref_view_features = multi_view_features[:, :num_of_tokens_per_view, :]
             ref_view_features = ref_view_features + ref_view_pe
         else:
@@ -739,13 +752,22 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
         if self.distinguish_ref_and_non_ref_views and self.use_pe_for_non_reference_views:
             # Add positional encoding for non-reference views (sequential indices starting from idx 1 or random indices which are uniformly sampled)
             if self.use_rand_idx_pe_for_non_reference_views:
-                non_ref_view_pe_indices = torch.randint(low=1, high=self.max_num_views_for_pe, size=(num_of_views - 1,))
+                non_ref_view_pe_indices = torch.randint(
+                    low=1,
+                    high=self.max_num_views_for_pe,
+                    size=(num_of_views - 1,),
+                    device=self.view_pos_table.device,
+                )
+                non_ref_view_pe = self.view_pos_table[non_ref_view_pe_indices].detach()
             else:
-                non_ref_view_pe_indices = torch.arange(1, num_of_views)
-            non_ref_view_pe = self.view_pos_table[non_ref_view_pe_indices].clone().detach()
-            non_ref_view_pe = non_ref_view_pe.reshape((1, num_of_views - 1, self.dim))
-            non_ref_view_pe = non_ref_view_pe.repeat_interleave(num_of_tokens_per_view, dim=1)
-            non_ref_view_pe = non_ref_view_pe.repeat(batch_size, 1, 1)
+                non_ref_view_pe = self.view_pos_table[1:num_of_views].detach()
+            non_ref_view_pe = non_ref_view_pe.reshape((1, num_of_views - 1, 1, self.dim))
+            non_ref_view_pe = non_ref_view_pe.expand(
+                batch_size_int,
+                num_of_views - 1,
+                num_of_tokens_per_view_int,
+                self.dim,
+            ).reshape(batch_size_int, (num_of_views - 1) * num_of_tokens_per_view_int, self.dim)
             non_ref_view_features = multi_view_features[
                 :, num_of_tokens_per_view : num_of_views * num_of_tokens_per_view, :
             ]

@@ -94,14 +94,9 @@ class FlowAdaptor(UniCeptionAdaptorBase):
 
         if not self.output_normalized_coordinate:
             x_scale, y_scale = self._get_xy_scale(output_shape)
-
-            # Get the stored mean, std and scaling factors to scale the flow
-            flow_mean = self.flow_mean.clone()
-            flow_mean[:, 0] *= x_scale
-            flow_mean[:, 1] *= y_scale
-            flow_std = self.flow_std.clone()
-            flow_std[:, 0] *= x_scale
-            flow_std[:, 1] *= y_scale
+            scale = x.new_tensor((x_scale, y_scale)).view(1, 2, 1, 1)
+            flow_mean = self.flow_mean.to(device=x.device, dtype=x.dtype) * scale
+            flow_std = self.flow_std.to(device=x.device, dtype=x.dtype) * scale
 
             # Unnormalize the flow
             x = x * flow_std + flow_mean
