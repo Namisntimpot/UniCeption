@@ -23,6 +23,7 @@ class cuRoPE2D_func(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_res):
         positions, base, F0 = ctx.saved_tensors[0], ctx.saved_base, ctx.saved_F0
+        grad_res = grad_res.contiguous()
         _kernels.rope_2d(grad_res, positions, base, -F0)
         ctx.mark_dirty(grad_res)
         return grad_res, None, None, None
@@ -35,5 +36,9 @@ class cuRoPE2D(torch.nn.Module):
         self.F0 = F0
 
     def forward(self, tokens, positions):
-        cuRoPE2D_func.apply(tokens.transpose(1, 2), positions, self.base, self.F0)
-        return tokens
+        # tokens come in as (B, H, N, D); kernel expects (B, N, H, D) contiguous
+        # (in-place on a non-contiguous transpose-view fails with the modern
+        # cuRoPE2D kernel, hence the explicit .contiguous() round-trip).
+        tokens_t = tokens.transpose(1, 2).contiguous()  # (B, N, H, D)
+        cuRoPE2D_func.apply(tokens_t, positions, self.base, self.F0)
+        return tokens_t.transpose(1, 2)
